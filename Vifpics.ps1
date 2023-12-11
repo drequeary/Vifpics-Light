@@ -215,27 +215,10 @@ function Start-CreateAnimation
 
     Write-Host "CREATE ANIMATION:" -ForegroundColor Magenta
     Write-Host "Enter video, image, or folder path." -ForegroundColor Cyan
-    do {
-        $InputPath = Read-Host "[Enter path]"
-        Cancel-Read -Option $InputPath
-    } while ($InputPath -eq "")
+    $InteractiveInput = Start-GetInput
 
-    $InputPath = Trim-String -String $InputPath
-    $InputPath = $InputPath.Split(",")
-    $InputPath = $InputPath.Trim()
+    $InputPath = $InteractiveInput.InputPath
 
-    $InteractiveInput = Test-Input $InputPath
-
-    if (($InteractiveInput.InputType -eq "file" -or $InteractiveInput.InputType -eq "dir") -and -not (Test-Path "$InputPath")) {
-        Write-Host -Message "File path `"$InputPath`" doesn't exist. Try again." -ForegroundColor DarkRed
-        Pause
-        Start-CreateAnimation -OptionsData $OptionsData
-        Return
-    }
-
-    if (-not (Test-Path "$InputPath") -or $InteractiveInput.InputType -eq "array") {
-        Show-ErrorMessage -Message "Video path `"$InputPath`" doesn't exist. Try again." Start-CreateAnimation -OptionsData $OptionsData
-    }
     Write-Host "SOURCE:"`"$InputPath`" -ForegroundColor Yellow
 
     Write-Host "-----------------------------------"
@@ -488,6 +471,7 @@ function Start-CreateAnimation
     if ($Confirm -eq "y" -or $Confirm -eq "yes") {
         $OptionsData.Animate = $True
         $OptionsData.Frames = $False
+        $OptionsData.Merge = $False
         $OptionsData.InputPath = $InputPath
         $OptionsData.Start = $Start
         $OptionsData.Duration = $Duration
@@ -519,16 +503,10 @@ function Start-CreateFrames
 
     Write-Host "GENERATE STILLS:" -ForegroundColor Magenta
     Write-Host "Select output format for image stills." -ForegroundColor Cyan
-    do {            
-        $InputPath = Read-Host "[Enter video path]"
-        Cancel-Read -Option $InputPath
-    } while ($InputPath -eq "")
+    $InteractiveInput = Start-GetInput
 
-    $InputPath = Trim-String -String $InputPath
+    $InputPath = $InteractiveInput.InputPath
 
-    if (-not (Test-Path "$InputPath")) {
-        Show-ErrorMessage -Message "Video path `"$InputPath`" doesn't exist. Try again."
-    }
     Write-Host "SOURCE:"`"$InputPath`" -ForegroundColor Yellow
 
     Write-Host "-----------------------------------"
@@ -784,21 +762,7 @@ function Test-Input
         } else {
             $InputType = "file"
         }
-
-        if ($InputPath.GetType().IsArray) {
-            $InputType = "array"
-        }
-
-        # End script if input file or folder doesn't exist.
-        if (($InputType -eq "file" -or $InputType -eq "dir") -and -not (Test-Path "$InputPath")) { 
-            Show-ErrorMessage -Message "Invalid source. Try again."
-        }
-
-        # End script if input file or folder doesn't exist.
-        if (-not (Test-Path "$InputPath")) { 
-            Show-ErrorMessage -Message "Input file or folder doesn't exist. Try again."
-        }
-
+        
         if ($InputType -eq "file") {
             $InputFile = Get-ChildItem -Path $InputPath
             $InputBasename = $InputFile.BaseName
@@ -826,6 +790,31 @@ function Test-Input
     }
 
     Return $InputData
+}
+
+function Start-GetInput
+{
+    do {
+        $InputPath = Read-Host "[Enter path]"
+        Cancel-Read -Option $InputPath
+    } while ($InputPath -eq "")
+
+    $InputPath = Trim-String -String $InputPath
+    $InputPath = $InputPath.Split(",")
+    $InputPath = $InputPath.Trim()
+
+    $InteractiveInput = Test-Input $InputPath
+
+    if (($InteractiveInput.InputType -eq "file" -or $InteractiveInput.InputType -eq "dir") -and -not (Test-Path "$InputPath")) {
+        Show-ErrorMessage -Message "File path `"$InputPath`" doesn't exist. Try again."
+    }
+
+    # End script if input file or folder doesn't exist.
+    if ($InputType -ne "file" -and $InputType -ne "dir") { 
+        Show-ErrorMessage -Message "Invalid source. Try again."
+    }
+
+    Return $InteractiveInput
 }
 
 function Start-GetStartTimecode
@@ -1318,8 +1307,8 @@ function New-FileListTXT
 
         # If a file in an array or folder does isn't supported, show error.
         # Files sould all be the same format.
-        if (-not ($AbsPathExt -in $SupportedImages) -and -not ($AbsPathExt -in $SupportedVideos)) {
-            Show-ErrorMessage -Message "`"$AbsPath`" is not a supported animated image or video. Cannot continue merge."
+        if (-not ($AbsPathExt -in $SupportedImages)) {
+            Show-ErrorMessage -Message "`"$AbsPath`" is not a supported animated image. Cannot continue merge."
         }
 
         # Gifs cannot be merged.
@@ -1365,7 +1354,7 @@ function New-Frames
 
         # Check output format.
         if ($OutputFormat -ne "png" -and $OutputFormat -ne "jpg" -and $OutputFormat -ne "webp" -and $OutputFormat -ne "avif") {
-            #$OutputFormat = "png"
+            $OutputFormat = "png"
         }
 
         $InputPath = $InputData.InputPath
@@ -1690,9 +1679,7 @@ function Set-Filter
 
             & $ffmpeg $TimestampsData.TimeRange -i "$InputPath" -vf palettegen=max_colors=256 -y "$Palette"
 
-            Vifpics-CheckError "Could not generate filter palette. Try using -palettgen option."
-
-            if ((Test-Path $Palette) -eq $False) {
+            if (-not (Test-Path $Palette) -or -not ($?)) {
                 Write-Host "There was a problem creating color palette. Using Palettegen filter instead..." -ForegroundColor DarkRed
                 Start-Sleep 1.5
                 $OptionsData.Palettegen = $True
