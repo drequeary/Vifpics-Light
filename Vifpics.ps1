@@ -1,3 +1,18 @@
+# Set Vifpics global variables.
+$Version = "0.1.0"
+$TempPath = "$Env:TEMP\Vifpics"
+$SupportedAnimations = @("gif", "webp", "png", "apng", "avif") | Sort-Object
+$SupportedImages = @("gif", "webp", "png", "apng", "avif", "jpg", "jpeg") | Sort-Object
+$SupportedVideos =  @("mp4", "mkv", "webm") | Sort-Object
+$SupportedInputTypes =  @("file", "dir") | Sort-Object
+$TimeCodePattern = '^([0-5]\d)[:\.]([0-5]\d)$'
+$TimeCodePattern2 = '^([0-5]\d)[:\.]([0-5]\d)[:\.]([0-5]\d)$'
+$TimeCodePattern3 = '^(?:(\d+):)?([0-5]?\d)(?:\.(\d{1,2}))?$'
+
+$ToNatural = { [regex]::Replace($_, '\d+', { $args[0].Value.PadLeft(20) }) } # For sorting files by natual order.
+$ConcatFlag = "-f concat -safe 0".Split(" ")
+
+
 # Setup executable locations.
 $Commands = @("ffmpeg", "ffprobe", "gifski", "apngasm")
 
@@ -62,20 +77,6 @@ function Main
             Clear-Host
             EXIT
         }
-
-        # Set Vifpics global variables.
-        $Version = "0.1.0"
-        $TempPath = "$Env:TEMP\Vifpics"
-        $SupportedAnimations = @("gif", "webp", "png", "apng", "avif") | Sort-Object
-        $SupportedImages = @("gif", "webp", "png", "apng", "avif", "jpg", "jpeg") | Sort-Object
-        $SupportedVideos =  @("mp4", "mkv", "webm") | Sort-Object
-        $SupportedInputTypes =  @("file", "dir") | Sort-Object
-        $TimeCodePattern = '^([0-5]\d)[:\.]([0-5]\d)$'
-        $TimeCodePattern2 = '^([0-5]\d)[:\.]([0-5]\d)[:\.]([0-5]\d)$'
-        $TimeCodePattern3 = '^(?:(\d+):)?([0-5]?\d)(?:\.(\d{1,2}))?$'
-
-        $ToNatural = { [regex]::Replace($_, '\d+', { $args[0].Value.PadLeft(20) }) } # For sorting files by natual order.
-        $ConcatFlag = "-f concat -safe 0".Split(" ")
 
         $OptionsData = New-VifpicsOptions
 
@@ -1271,7 +1272,7 @@ function New-FileListTXT
 
     if (-not (Test-Path "$TempPath\files.txt")) {
         try {
-            New-Item -Path "$TempPath\files.txt"
+            New-Item -Path "$TempPath\files.txt" -ErrorAction Stop
         } catch {
             Show-ErrorMessage -Message "Could not create file to store filenames."
         }
@@ -1318,12 +1319,17 @@ function New-FileListTXT
 
         # Add file path to text file. ffmpeg will use this to merge files.
         if ($AbsPathExt -eq $OptionsData.MergeFormat) {
-            Add-Content -Path "$TempPath\files.txt" -value "file `'$Abspath`'"
+            try {
+                Add-Content -Path "$TempPath\files.txt" -value "file `'$Abspath`'" -ErrorAction Stop
 
-            # Images won't merge correctly without adding duration to frame.
-            if ($OptionsData.MergeFormat -in $SupportedImages) {
-                Add-Content -Path "$TempPath\files.txt" -value "duration 0.03333"
+                # Images won't merge correctly without adding duration to frame.
+                if ($OptionsData.MergeFormat -in $SupportedImages) {
+                    Add-Content -Path "$TempPath\files.txt" -value "duration 0.03333" -ErrorAction Stop
+                }
+            } catch {
+                Show-ErrorMessage -Message "There was problem creating file list text."
             }
+
         }
     }
 }
@@ -1372,7 +1378,7 @@ function New-Frames
         $Filters = Set-Filter -InputData $InputData -OptionsData $OptionsData -TimestampsData $TimestampsData -OutputFormat $OutputFormat 
 
         try {
-            New-Item -Path "$OutputPath" -ItemType Directory
+            New-Item -Path "$OutputPath" -ItemType Directory -ErrorAction Stop
         } catch {
             Show-ErrorMessage -Message "Could not create frames folder to store frames in."
         }
@@ -1405,7 +1411,7 @@ function Start-RemoveExistingOutput
         if ($Confirm -eq "y" -or $Confirm -eq "yes") {
 
             try {
-                Remove-Item -Path "$OutputPath" -Force
+                Remove-Item -Path "$OutputPath" -Force -ErrorAction Stop
             } catch {
                 Write-Host "Could not remove existing file..."
                 Main
@@ -1704,7 +1710,7 @@ function New-TempFolder
 		Write-Host "Creating new temp..." -ForegroundColor Cyan
         Start-Sleep 0.5
         try {
-            New-Item "$TempPath" -ItemType Directory -ErrorAction SilentlyContinue
+            New-Item "$TempPath" -ItemType Directory -ErrorAction Stop
         } catch {
             Write-Host "Could not create temp folder. Output may be wrong..." -ForegroundColor DarkRed
             Start-Sleep 2
