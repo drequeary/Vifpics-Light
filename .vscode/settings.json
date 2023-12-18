@@ -1,3 +1,5 @@
 {
-    "workbench.colorTheme": "Bearded Theme Arc"
+    "workbench.colorTheme": "Bearded Theme Arc",
+    "workbench.preferredDarkColorTheme": "Visual Studio Dark",
+    "workbench.preferredHighContrastColorTheme": "Default High Contrast"
 }

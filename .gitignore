@@ -1,1 +1,7 @@
 private/
+.vscode/
+.vscode/settings.json\
+ffmpeg.exe
+ffprobe.exe
+gifski.exe
+apngasm.exe

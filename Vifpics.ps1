@@ -10,15 +10,13 @@ $TimeCodePattern2 = '^([0-5]\d)[:\.]([0-5]\d)[:\.]([0-5]\d)$'
 $TimeCodePattern3 = '^(?:(\d+):)?([0-5]?\d)(?:\.(\d{1,2}))?$'
 
 $ToNatural = { [regex]::Replace($_, '\d+', { $args[0].Value.PadLeft(20) }) } # For sorting files by natual order.
-$ConcatFlag = "-f concat -safe 0".Split(" ")
-
 
 # Setup executable locations.
 $Commands = @("ffmpeg", "ffprobe", "gifski", "apngasm")
 
 foreach ($Command in $Commands) {
     if (Test-Path ("$PSScriptRoot\$Command.exe")) {
-        New-Variable -Name "$Command" -Value "./$Command.exe"
+        New-Variable -Name "$Command" -Value "$PSScriptRoot\$Command.exe"
     } else {
         New-Variable -Name "$Command" -Value "$Command.exe"
     }
@@ -31,7 +29,6 @@ function New-VifpicsOptions
         OutputPath = ""
         Format = "gif"
         Animate = $True
-        Merge = $False
         MergeFormat = $null
         Frames = $False
         Start = "0:00"
@@ -51,7 +48,7 @@ function New-VifpicsOptions
         GifskiQuality = 100
         WebPCompression = 4
         WebPQuality = 75
-        PNGCompressMethod = "-z1"
+        PNGCompressMethod = "-z0"
         LibSVT = $False
         LibAOM = $False
         AVIFQ = 8
@@ -68,16 +65,6 @@ function New-VifpicsOptions
 function Main
 {
     begin {
-        $HasFFmpeg = Test-Command -Command "ffmpeg"
-        if (-not $HasFFmpeg) {
-            Write-Host "FFmpeg must be installed or located in the same folder" -ForegroundColor DarkRed
-            Write-Host "as Vifpics for Vifpics to run properly." -ForegroundColor DarkRed
-            Write-Host "Website: https://www.gyan.dev/ffmpeg/builds/" -ForegroundColor Cyan
-            Pause
-            Clear-Host
-            EXIT
-        }
-
         $OptionsData = New-VifpicsOptions
 
         # Get user input from interactive mode.
@@ -85,12 +72,6 @@ function Main
 
         # Check and set input file data.
         $InputData = Test-Input $OptionsData.InputPath
-
-        # If input is a folder, use merge task.
-        if ($InputData.InputType -eq "dir") {
-            $OptionsData.Merge = $True
-            $OptionsData.Animate = $False
-        }
 
         # Set timestams
         $TimestampsData = Set-TimeStamps -InputData $InputData -OptionsData $OptionsData
@@ -101,16 +82,14 @@ function Main
         # Apply size preset.
         Set-SizePreset -OptionsData $OptionsData
 
-        # Apply animation options.
-        Set-AnimationOptions -OptionsData $OptionsData        
+        # Apply resolution.
+        Set-Resolution -OptionsData $OptionsData        
     }
 
     process {
         if ($OptionsData.Animate) {
             New-Animation -InputData $InputData -OptionsData $OptionsData -TimestampsData $TimestampsData
-        } elseif ($OptionsData.Merge) {
-            New-Merge -InputData $InputData -OptionsData $OptionsData -TimestampsData $TimestampsData
-        }  elseif ($OptionsData.Frames) {
+        } elseif ($OptionsData.Frames) {
             New-Frames -InputData $InputData -OptionsData $OptionsData -TimestampsData $TimestampsData
         } else {
             Show-ErrorMessage "Invalid task."
@@ -151,12 +130,13 @@ function Start-Interactive
     $Key = 0
 
     Write-Host "CHOOSE A TASK:" -ForegroundColor Magenta
-    $Options = 0..4
+    $Options = 0..5
     $Options[0] = "📹 Create Animation"
     $Options[1] = "✂️ Generate Frames"
     $Options[2] = "▶️ Show Formats"
-    $Options[3] = "❔ About"
-    $Options[4] = "🚪 LEAVE!"
+    $Options[3] = "⬇️ Download Encoders"
+    $Options[4] = "❔ About"
+    $Options[5] = "🚪 LEAVE!"
     Draw-MenuOptions -Options $Options -POS $CurrentSelection
 
     while ($Key -ne 13 -and $Key -ne 27) {
@@ -179,10 +159,15 @@ function Start-Interactive
 
         if ($Key -eq 13 -and $CurrentSelection -eq 3) 
         {
-            Show-About
+            Start-DownloadEncoders
         }
 
         if ($Key -eq 13 -and $CurrentSelection -eq 4) 
+        {
+            Show-About
+        }
+
+        if ($Key -eq 13 -and $CurrentSelection -eq 5) 
         {
             $Exit = $True
         }
@@ -266,7 +251,7 @@ function Start-CreateAnimation
 
     if (($Preset -eq "best") -and -not (Test-Command "gifski")) {
         Write-Host "Gifski must be installed in order to create higher quality GIFs." -ForegroundColor DarkRed
-        Write-Host "Website: https://github.com/ImageOptim/gifski" -ForegroundColor Cyan
+        Write-Host "Visit: https://github.com/ImageOptim/gifski or `nselect Download Encoders from main menu." -ForegroundColor Cyan
         Pause
 		Start-CreateAnimation -OptionsData $OptionsData
         Return
@@ -274,7 +259,7 @@ function Start-CreateAnimation
 	
     if ($Preset -eq "pngopt" -and -not (Test-Command "apngasm")) {
         Write-Host "apngasm must be installed in order to create optimized PNGs." -ForegroundColor DarkRed
-        Write-Host "Website: https://apngasm.sourceforge.net" -ForegroundColor Cyan
+        Write-Host "Visit: https://apngasm.sourceforge.net or `nselect Download Encoders from main menu." -ForegroundColor Cyan
         Pause
 		Start-CreateAnimation -OptionsData $OptionsData
         Return
@@ -305,7 +290,7 @@ function Start-CreateAnimation
     $Options[12] = "Full HD (1920x1080)"
     $Options[13] = "2K (2560x1440)"
     $Options[14] = "4K (3840x2160)"
-    $Options[15] = "8K (7680x4320)"
+    $Options[15] = "8K (7680x4320/experimental)"
 
     Draw-MenuOptions -Options $Options -POS $CurrentSelection
 
@@ -472,7 +457,6 @@ function Start-CreateAnimation
     if ($Confirm -eq "y" -or $Confirm -eq "yes") {
         $OptionsData.Animate = $True
         $OptionsData.Frames = $False
-        $OptionsData.Merge = $False
         $OptionsData.InputPath = $InputPath
         $OptionsData.Start = $Start
         $OptionsData.Duration = $Duration
@@ -502,8 +486,8 @@ function Start-CreateFrames
 
     [console]::CursorVisible = $True
 
-    Write-Host "GENERATE STILLS:" -ForegroundColor Magenta
-    Write-Host "Select output format for image stills." -ForegroundColor Cyan
+    Write-Host "GENERATE FRAMES:" -ForegroundColor Magenta
+    Write-Host "Enter video or animated image path." -ForegroundColor Cyan
     $InteractiveInput = Start-GetInput
 
     $InputPath = $InteractiveInput.InputPath
@@ -514,6 +498,7 @@ function Start-CreateFrames
 
     [console]::CursorVisible = $False
 
+    Write-Host "Select frame format." -ForegroundColor Cyan
     $Options = 0..3
     $Options[0] = "PNG"
     $Options[1] = "JPG"
@@ -536,7 +521,7 @@ function Start-CreateFrames
         Invoke-InteractiveEsc
     }
 
-    Write-Host "OUTPUT FORMAT"$Format
+    Write-Host "OUTPUT FORMAT:"$Format -ForegroundColor Yellow
 
     Write-Host "-----------------------------------"
 
@@ -575,6 +560,71 @@ function Start-CreateFrames
         Main Start-CreateFrames -OptionsData $OptionsData
         Return
     }
+}
+
+function Start-GetInput
+{
+    do {
+        $InputPath = Read-Host "[Enter path]"
+        Cancel-Read -Option $InputPath
+    } while ($InputPath -eq "")
+
+    $InputPath = Trim-String -String $InputPath
+    $InputPath = $InputPath.Split(",")
+    $InputPath = $InputPath.Trim()
+
+    $InteractiveInput = Test-Input $InputPath
+
+    if (($InteractiveInput.InputType -eq "file" -or $InteractiveInput.InputType -eq "dir") -and -not (Test-Path "$InputPath")) {
+        Show-ErrorMessage -Message "File path `"$InputPath`" doesn't exist. Try again."
+    }
+
+    # End script if input file or folder doesn't exist.
+    if ($InteractiveInput.InputType -ne "file" -and $InteractiveInput.InputType -ne "dir") { 
+        Show-ErrorMessage -Message "Invalid source. Try again."
+    }
+
+    Return $InteractiveInput
+}
+
+function Start-GetStartTimecode
+{
+    [console]::CursorVisible = $True
+
+    Write-Host "Enter start timecode. Like 1:30 or 1.30. Default: 0:00." -ForegroundColor Cyan
+    do {
+        $Start = Read-Host "[Enter start timecode]"
+        Cancel-Read -Option $Start
+    } while ($Start -ne "" -and (-not ($Start -match $TimeCodePattern) -and -not ($Start -match $TimeCodePattern2) -and -not ($Start -match $TimeCodePattern3)))
+
+    $Start = Trim-String -String $Start
+
+    if ($Start -eq "") {
+        $Start = "0:00"
+    }
+
+    Return $Start
+}
+
+function Start-GetEndTimeCode
+{
+    [console]::CursorVisible = $True
+
+    Write-Host "Enter animation duration in seconds or 0 for no duration limit. Default: 1." -ForegroundColor Cyan
+    $Duration = Read-Host "[Enter duration]"
+    Cancel-Read -Option $Duration
+
+    if ($Duration -lt 1 -and -not (Test-Integer $Duration)) {
+        $Duration = 1
+    }
+
+    if (-not (Test-Integer $Duration)) {
+        $Duration = 1
+    }
+
+    $Duration = Trim-String -String $Duration
+
+    Return $Duration
 }
 
 function Get-UpDownControls
@@ -625,6 +675,61 @@ function Get-UpDownControls
     Return $Key, $Options, $CurrentSelection
 }
 
+function Start-DownloadEncoders {
+    Clear-Host
+    Show-MenuHeader
+
+    [console]::CursorVisible = $True
+
+    $FilePath = "$PSScriptRoot"
+    $WithErrors = $False
+    
+    Write-Host "Would you like to download encoders?" -ForegroundColor Cyan
+    Write-Host "This will download ffmpeg, ffprobe, gifski, and `napngasm from cdn.vif.pics." -ForegroundColor Cyan
+    do {
+        $Confirm = Read-Host "[no (n) / yes (y)]"
+    } while ($Confirm -ne "y" -and $Confirm -ne "yes" -and $Confirm -ne "n" -and  $Confirm -ne "no")
+
+    if ($Confirm -eq "y" -or $Confirm -eq "yes") {
+        $EncodersToGet = @("ffmpeg", "ffprobe", "gifski", "apngasm")
+
+        foreach($Encoder in $EncodersToGet) {
+            Write-Host "`nDownloading $Encoder..." -ForegroundColor Cyan
+            Write-Host "FROM: https://cdn.vif.pics/public/encoders/$Encoder.exe" -ForegroundColor Blue
+            Start-Sleep 0.5
+
+            try {
+                Write-Host "Checking connection..." -ForegroundColor Blue
+                $Response = Invoke-WebRequest -Uri "https://cdn.vif.pics/public/encoders/$Encoder.exe" -ErrorAction SilentlyContinue
+            } catch {
+                Write-Host "Connection error. Could not download $Encoder.exe. Skipping...`n" -ForegroundColor DarkRed
+                Start-Sleep 1.5
+
+                $WithErrors = $True
+                Continue 
+            }
+            
+            Write-Host "Connection successful..." -ForegroundColor Green
+            Start-Sleep 0.5
+            
+            curl -o "$FilePath\$Encoder.exe" "https://cdn.vif.pics/public/encoders/$Encoder.exe"
+        }
+
+        if ($WithErrors -eq $True) {
+            Write-Host "Finished with errors." -ForegroundColor DarkRed
+            Pause
+            Main
+        } else {
+            Write-Host "Done." -ForegroundColor Green
+            Write-Host "Please restart Vifpics." -ForegroundColor Cyan
+            Pause
+            EXIT
+        }
+    }
+
+    Main
+}
+
 function Show-Formats
 {
     Clear-Host
@@ -647,7 +752,7 @@ function Show-Formats
     Write-Host "`nSUPPORTED IMAGE OUTPUT FORMATS (for frames):" -ForegroundColor Cyan
     Write-Host "PNG"
     Write-Host "JPG"
-    Write-Host "WebP"
+    Write-Host "WEBP"
     Write-Host "AVIF"
 
     Write-Host "`nSUPPORTED VIDEO INPUT FORMATS:" -ForegroundColor Cyan
@@ -664,13 +769,9 @@ function Show-About
 {
     Clear-Host
     Show-MenuHeader
-    Write-Host "❔ABOUT" -ForegroundColor Cyan
+    Write-Host "❔ ABOUT" -ForegroundColor Cyan
     Write-Host "    Version: $Version (light) - 2023" -ForegroundColor Green
     Write-Host "        GitHub Repo - https://github.com/drequeary/vifpics-light"
-    Write-Host
-    Write-Host "    Created by - DeAndre Queary"
-    Write-Host "        GitHub:     https://github.com/drequeary/"
-    Write-Host "        Contact:    contact@deandrequeary.com"
     Write-Host "------------------------------------------------------------------------------"
     Write-Host "🔗 LINKS" -ForegroundColor Cyan
     Write-Host "    ffmpeg                   https://ffmpeg.org/"
@@ -679,35 +780,22 @@ function Show-About
     Write-Host "    gifski                   https://github.com/ImageOptim/gifski/"
     Write-Host "    apngasm                  https://apngasm.sourceforge.net/"
     Write-Host "------------------------------------------------------------------------------"
-    Write-Host "🙏🏾CREDITS" -ForegroundColor Cyan
-    Write-Host "    Microsoft Powershell Doc https://learn.microsoft.com/en-us/powershell/scripting/overview?view=powershell-7.4"
-    Write-Host "    StackOverflow            "
-    Write-Host "    ChatGPT                  https://chat.openai.com/"
-    Write-Host
+    Write-Host "🥷 CREDITS" -ForegroundColor Cyan
+    Write-Host "    DeAndre Queary"
+    Write-Host "        GitHub:     https://github.com/drequeary"
+    Write-Host "        Contact:    contact@deandrequeary.com"
     Write-Host "😭 SPECIAL THANKS" -ForegroundColor Magenta
     Write-Host "    NabiKAZ on GitHub for making video2gif.bat."
-    Write-Host "        I originally wrote this entire program in batchscript based on NabiKAZ's video2gif.bat."
-    Write-Host "        Then decided to rewrite it in Powershell."
     Write-Host "        https://github.com/NabiKAZ/video2gif"
     Write-Host "        -------------"
     Write-Host "    kornelski for developing Gifski."
-    Write-Host "        The main reason I wrote this script was because I couldn't get gifski to build with"
-    Write-Host "        the video feature built-in. But gifski is a dope tool. <3"
-    Write-Host "        https://github.com/kornelski/`n"
-    Write-Host "        Fun fact: Vifpics was oriignally called Vifski. But I figured the name was"
-    Write-Host "                  wouldn't work well for SEO given it sounded too close to Gifski. 🤷🏾‍♂️"       
+    Write-Host "        https://github.com/kornelski/"
     Write-Host "        -------------"
     Write-Host "    The following articles on creating high quality GIFs."
     Write-Host "        https://www.bannerbear.com/blog/how-to-make-a-gif-from-a-video-using-ffmpeg/"
-    Write-Host
     Write-Host "        https://blog.pkh.me/p/21-high-quality-gif-with-ffmpeg.html/"
     Write-Host "        -------------"
     Write-Host "    All the developers behind ffmpeg and the optional encoders. This script does nothing without them." -ForegroundColor Yellow
-    Write-Host "------------------------------------------------------------------------------"
-    Write-Host  "⚠️LIMITATIONS" -ForegroundColor Cyan
-    Write-Host  "* Converting from and merging WebP is NOT supported." -ForegroundColor DarkRed
-    Write-Host  "* Merging GIFs is NOT supported." -ForegroundColor DarkRed
-    Write-Host "------------------------------------------------------------------------------"
     Pause
     Main
 }
@@ -739,7 +827,348 @@ function Invoke-InteractiveEsc
 }
 
 <#
-    ANIMATION OPTION FUNCTIONS
+    TASK FUNCTIONS
+    ________________________________________________________________________________
+#>
+function New-Animation
+{
+    param (
+        [object] $InputData,
+        [object] $OptionsData,
+        [object] $TimestampsData
+    )
+
+    begin {
+        Require-Command -Command "ffmpeg"
+
+        Write-Host "CREATING ANIMATION" -ForegroundColor Magenta
+        Start-Sleep 1
+
+        # Check input
+        if (-not ($InputData.InputFormat -in $SupportedAnimations) -and -not ($InputData.InputFormat -in $SupportedVideos) -and $InputData.InputType -ne "dir") {
+            Show-ErrorMessage -Message "Input must be an animated image or video file."
+        }
+
+        $InputPath = $InputData.InputPath
+        $InputType = $InputData.InputType
+        $InputFormat = $InputData.InputFormat
+        $Timerange = $TimestampsData.TimeRange
+
+        $OutputData = Get-OutputFile -InputData $InputData -OptionsData $OptionsData
+        $OutputPath = $OutputData.OutputPath
+        $OutputFormat = $OutputData.Format
+
+        $ConcatFlag = "-f concat -safe 0".Split(" ")
+
+        # Check output format.
+        if (-not ($OutputFormat -in $SupportedAnimations) -and -not ($OutputFormat -in $SupportedVideos)) {
+            Show-ErrorMessage -Message "'$OutputFormat' is not image/video output format."
+        }
+
+        Start-RemoveExistingOutput
+        
+        New-TempFolder
+    }
+
+    process {
+        # If input is a folder of frames and encoder is set to ffmpeg, use ffmpeg to
+        # turn frames into a video first. Then use that video as source.
+        # Gifski and apngasm encoders already do this in their respective Invoke functions.
+        if ($InputType -eq "dir" -and $OptionsData.Encoder -eq "ffmpeg") {
+            Write-Host "Turning frames into video..." -ForegroundColor Cyan
+            Start-Sleep 1
+
+            New-MergeList -InputPath $InputPath -InputFromat $InputFormat -InputType $InputType -OptionsData $OptionsData
+
+            & $ffmpeg $ConcatFlag -i "$TempPath\files.txt" -c:v libx264 -c:a copy -preset slow -crf 18 -y "$TempPath\temp.mp4"
+            
+            $InputData = Test-Input -InputPath "$TempPath\temp.mp4"
+            $InputPath = "$TempPath\temp.mp4"
+        }
+
+        $Filters = Set-Filter -InputData $InputData -OptionsData $OptionsData -TimestampsData $TimestampsData -OutputFormat $OutputFormat 
+
+        if ($OptionsData.Encoder -eq "ffmpeg") {
+            $LoopOption = Set-LoopOption -OptionsData $OptionsData -OutputFormat $OutputFormat -Encoder $OutputData.Encoder
+            
+            if ($OutputFormat -eq "webp") {
+                Write-Host "Creating animated WebP (w/ ffmpeg using libwebp)..." -ForegroundColor Cyan
+                Start-Sleep 1
+    
+                & $ffmpeg $TimeRange -i "$InputPath" $Filters $LoopOption -c libwebp -compression_level $OptionsData.WebpCompression -qscale $OptionsData.WebpQuality -y "$TempPath\animated.webp"
+            } elseif ($OutputFormat -eq "png" -or $OutputFormat -eq "apng") {
+                Write-Host "Creating animated PNG (w/ ffmpeg)..." -ForegroundColor Cyan
+                Start-Sleep 1
+    
+                & $ffmpeg $TimeRange -i "$InputPath" $Filters $LoopOption -y "$TempPath\animated.apng"
+
+                try {
+                    Copy-Item -Path "$TempPath\animated.apng" -Destination "$TempPath\animated.png" -ErrorAction Stop
+                } catch {
+                    Write-Host "Could not copy final PNG file. Check temp folder." -ForegroundColor DarkRed
+                    Pause
+                }
+            } elseif ($OutputFormat -eq "avif" -and $OptionsData.LibAOM) {
+                Write-Host "Creating animated AVIF (w/ ffmpeg using libaom)..." -ForegroundColor Cyan
+                Start-Sleep 1
+    
+                if (-not $AVIFQ) { $AVIFQ = 8 }
+    
+                & $ffmpeg $TimeRange -i "$InputPath" $Filters $LoopOption -c libaom-av1 -cpu-used $OptionsData.AVIFQ -row-mt 1 -g 24 -pix_fmt yuv420p10le -svtav1-params tune=0:film-grain=$OptionsData.FilmGrain -crf $OptionsData.CRF -y "$TempPath\animated.avif"
+            } elseif ($OutputFormat -eq "avif") {
+                Write-Host "Creating animated AVIF (w/ ffmpeg using libsvtav1)..." -ForegroundColor Cyan
+                Start-Sleep 1
+    
+                if (-not $AVIFQ) { $AVIFQ = 13 }
+    
+                & $ffmpeg $TimeRange -i "$InputPath" $Filters $LoopOption -c libsvtav1 -preset $OptionsData.AVIFQ -g 24 -pix_fmt yuv420p -svtav1-params tune=0:film-grain=$OptionsData.FilmGrain -crf $OptionsData.CRF -y "$TempPath\animated.avif"
+            } elseif ($OutputFormat -eq "gif") {
+                Write-Host "Creating animated GIF (w/ ffmpeg)..." -ForegroundColor Cyan
+                Start-Sleep 1
+ 
+                & $ffmpeg $TimeRange -i "$InputPath" $Filters $LoopOption -y "$TempPath\animated.gif"
+            } elseif ($OutputFormat -eq "mp4" -or $OutputFormat -eq "mkv") {
+                $CodecName = $OutputFormat.ToUpper()
+                Write-Host "Creating $CodecName video (w/ ffmpeg)..." -ForegroundColor Cyan
+                Start-Sleep 1
+
+                & $ffmpeg -i "$InputPath" $Filters $LoopOption -c:v libx264 -c:a copy -preset slow -crf $OptionsData.CRF -y "$TempPath\animated.$OutputFormat"
+            } elseif ($OutputFormat -eq "webm") {
+                Write-Host "Creating WebM video (w/ ffmpeg)..." -ForegroundColor Cyan
+                Start-Sleep 1
+
+                & $ffmpeg -i "$InputPath" $Filters $LoopOption -c:v libvpx-vp9 -c:a libopus -crf $OptionsData.CRF -y "$TempPath\animated.webm"
+            } 
+
+            Vifpics-CheckError -Message "There was a problem creating animation. See ffmpeg output above for details."
+        }
+
+        if ($OptionsData.Encoder -eq "gifski") {
+            Invoke-gifski -InputData $InputData -OptionsData $OptionsData -TimestampsData $TimestampsData -OutputPath "$TempPath\animated.gif"
+        }
+
+        if ($OptionsData.Encoder -eq "apngasm") {
+            Invoke-apngasm -InputPath $InputPath -OptionsData $OptionsData -TimestampsData $TimestampsData -OutputPath "$TempPath\animated.png"
+
+            try {
+                Copy-Item -Path "$TempPath\animated.png" -Destination "$TempPath\animated.apng" -ErrorAction Stop
+            } catch {
+                Write-Host "Could not copy final PNG file. Check temp folder." -ForegroundColor DarkRed
+                Pause
+            }
+        }
+
+        Vifpics-CheckError -Message "There was a problem creating animation. See output above for details."
+
+        try {
+            Copy-Item -Path "$TempPath\animated.$OutputFormat" -Destination "$OutputPath" -ErrorAction Stop
+            Start-RenameAPNG -OutputPath $OutputPath -OutputFormat $OutputFormat
+        } catch {
+            Show-ErrorMessage -Message "Could not save $OutputPath. Check Vifpics temp folder in `"$TempPath`"."
+        }
+    }
+
+    end {
+        Return
+    }
+}
+
+function New-Frames
+{
+    param (
+        [object] $InputData,
+        [object] $OptionsData,
+        [object] $TimestampsData
+    )
+
+    begin {
+        Require-Command -Command "ffmpeg"
+
+        Write-Host
+        Write-Host "GENERATING FRAMES" -ForegroundColor Magenta
+        Start-Sleep 1
+
+        # Check input.
+        if (-not ($InputData.InputFormat -in $SupportedAnimations) -and -not ($InputData.InputFormat -in $SupportedVideos)) {
+            Show-ErrorMessage -Message "Input file needs to be an animated image or video file."
+        }
+
+        if ($InputData.InputFormat -eq "webp") {
+            Show-ErrorMessage "This version of Vifpics cannot convert animated WebP to other formats."
+        }
+
+        $OutputFormat = $OptionsData.Format
+
+        # Check output format.
+        if ($OutputFormat -ne "png" -and $OutputFormat -ne "jpg" -and $OutputFormat -ne "webp" -and $OutputFormat -ne "avif") {
+            $OutputFormat = "png"
+        }
+
+        $InputPath = $InputData.InputPath
+        $InputBasename = $InputData.InputBasename
+
+        $UniqueID = Get-Random
+        $FramesFolder = "$InputBasename" + "_frames_" + "$UniqueID"
+        $OutputPath = "$PWD\$FramesFolder"
+        $FramesName = "frame_"
+        $FramesIndex = "%01d"
+        $TimeRange = $TimestampsData.TimeRange
+    }
+
+    process {        
+        $Filters = Set-Filter -InputData $InputData -OptionsData $OptionsData -TimestampsData $TimestampsData -OutputFormat $OutputFormat 
+
+        try {
+            New-Item -Path "$OutputPath" -ItemType Directory -ErrorAction Stop
+        } catch {
+            Show-ErrorMessage -Message "Could not create frames folder to store frames in."
+        }
+    
+        if ($OutputFormat -eq "webp") {
+            & $ffmpeg $TimeRange -i "$InputPath" $Filters -compression_level $OptionsData.WebpCompression -qscale $OptionsData.WebpQuality -y -c libwebp "$OutputPath\$FramesName$FramesIndex.webp"
+        } elseif ($OutputFormat -eq "avif") {
+            & $ffmpeg $TimeRange -i "$InputPath" $Filters -f image2 "$OutputPath\$FramesName$FramesIndex.avif"
+        } else {
+            & $ffmpeg $TimeRange -i "$InputPath" $Filters -y "$OutputPath\$FramesName$FramesIndex.$OutputFormat"
+        }
+
+        Vifpics-CheckError -Message "Could not create frames. Check ffmpeg output above for details."
+    }
+
+    end {
+        Return
+    }
+}
+
+function Invoke-gifski
+{
+    param (
+        [object] $InputData,
+        [object] $OptionsData,
+        [object] $TimestampsData,
+        [string] $OutputPath
+    )
+
+    begin {
+        $InputPath = $InputData.InputPath
+        $Timerange = $TimestampsData.TimeRange
+        $Resolution = $OptionsData.Resolution
+        $Width = $OptionsData.Width
+        $Height = $OptionsData.Height
+    }
+
+    process {
+        Require-Command -Command "gifski"
+
+        New-FramesFolder
+        
+        Write-Host "Generating frames for gifski..." -ForegroundColor Blue
+        Start-Sleep 0.5
+
+        & $ffmpeg $TimeRange -i "$InputPath" -vf $Resolution -y "$TempPath\frames\frame_%01d.png"
+
+        Vifpics-CheckError -Message "There was a problem generating frames. See output ffmpeg above for details."
+
+        Write-Host "Creating higher quality animated GIF (w/ gifski)..." -ForegroundColor Cyan
+        Start-Sleep 0.5
+        
+        # Adjust for Gifski resolution.
+        $GifskiRes = ""
+
+        # Gifski default resolution.
+        if ($Width -gt 0 -and (Test-Integer $Width)) { $GifskiRes = "--width $Width" }
+        if ($Width -gt 0 -and $Height -gt 0 -and (Test-Integer $Width)) { $GifskiRes = "--width $Width --height $Height".Split(" ") }
+
+        $HasFfprobe = Test-Command "ffprobe"
+
+        if (-not $HasFfprobe -and $Width -eq "-1" -and $Height -eq "-1") {
+            Write-Host "`nffprobe wasn't found or is executable. Using default gifski resolution..." -ForegroundColor DarkRed
+            Start-Sleep 1.5
+        } else {
+            $Codec = Get-CodecInfo -InputPath $InputPath
+            
+            # Use ffprobe to get original resolution for gifski encoding.
+            if ($Codec -ne @{}) {
+                if ($Width -le 0 -and $Codec.streams[0].width) { 
+                    $GifskiRes = "--width "+$Codec.streams[0].width
+                }
+
+                if ($Width -le 0 -and ($Codec.streams[0].width -gt 0) -and ($Codec.streams[0].height -gt 0)) { 
+                    $GifskiRes = "--width "+$Codec.streams[0].width+" --height "+$Codec.streams[0].height
+                }    
+
+                if ($Width -le 0 -and $Codec.streams[1].width -gt 0) { 
+                    $GifskiRes = "--width "+$Codec.streams[1].width
+                }
+
+                if ($Width -le 0 -and ($Codec.streams[1].width -gt 0 -or $Codec.streams[1].height -gt 0)) { 
+                    $GifskiRes = "--width "+$Codec.streams[1].width+" --height "+$Codec.streams[1].height
+                }   
+            }
+        }
+
+        $GifskiRes = $GifskiRes.Split(" ")
+
+        if (-not $GifskiRes) {
+            Clear-Variable GifskiRes
+        }
+
+
+        $GifskiQuality = $OptionsData.GifskiQuality
+        $LoopOption = Set-LoopOption -OptionsData $OptionsData -OutputFormat $OutputFormat -Encoder "gifski"
+
+        & $gifski $GifskiRes --quality $GifskiQuality --fps $OptionsData.FPS $LoopOption --fast -o "$OutputPath" "$TempPath\frames\frame_*.png"
+
+        Vifpics-CheckError -Message "There was an error creating animation. See gifkski output above for details."
+    }
+
+    end {
+        Return
+    }
+}
+
+function Invoke-apngasm
+{
+    param (
+        [object] $InputPath,
+        [string] $OutputPath,
+        [object] $OptionsData,
+        [object] $TimestampsData
+    )
+
+    begin {
+        $Resolution = $OptionsData.Resolution
+    }
+
+    process {
+        Write-Host "Creating optimized animated PNG (w/ apngasm)..." -ForegroundColor Cyan
+        Start-Sleep 0.5
+        New-FramesFolder
+        Write-Host "Generating frames..." -ForegroundColor Blue
+        Start-Sleep 0.5
+
+        $Timerange = $TimestampsData.TimeRange
+        & $ffmpeg $Timerange -i "$InputPath" -vf $Resolution -y "$TempPath\frames\frame-%04d.png"
+
+        Vifpics-CheckError -Message "There was a problem generating frames. Check ffmpeg output above for details."
+
+        Write-Host "Generating PNG..." -ForegroundColor Cyan
+        Start-Sleep 0.5
+
+        $LoopOption = Set-LoopOption -OptionsData $OptionsData -OutputFormat $OutputFormat -Encoder "apngasm"
+
+        & $apngasm "$OutputPath" "$TempPath\frames\frame-*.png" 1 $OptionsData.FPS $LoopOption $OptionsData.PNGcompressMethod -kc
+
+        Vifpics-CheckError -Message "There was a problem creating file. Check apngasm output above for details."
+    }
+
+    end {
+        Return
+    }
+}
+
+<#
+    FUNCTIONS
     ________________________________________________________________________________
 #>
 function Test-Input
@@ -754,7 +1183,7 @@ function Test-Input
     $InputFormat = ""
     $InputType = ""
 
-    if ($InputPath) {
+    if ($InputPath -and (Test-Path $InputPath)) {
         # Check if input and output are files or folders.
         $InputExt = Split-Path -Path $InputPath -Extension
 
@@ -777,6 +1206,8 @@ function Test-Input
         if ((-not ($InputFormat -in $SupportedAnimations) -and -not ($InputFormat -in $SupportedVideos)) -and -not $InputType -in $SupportedInputTypes) {
             Show-ErrorMessage -Message "Unsupported source file. Select `"Show Formats`" option to see supported file types."
         }
+    } elseif ($InputPath -and -not (Test-Path $InputPath)) {
+        Show-ErrorMessage -Message "Source file or folder `"$InputPath`" not found."
     }
 
     $InputData = New-Object PSObject -Property @{
@@ -793,69 +1224,47 @@ function Test-Input
     Return $InputData
 }
 
-function Start-GetInput
+function Get-OutputFile
 {
-    do {
-        $InputPath = Read-Host "[Enter path]"
-        Cancel-Read -Option $InputPath
-    } while ($InputPath -eq "")
+    param (
+        [object] $InputData,
+        [object] $OptionsData
+    )
 
-    $InputPath = Trim-String -String $InputPath
-    $InputPath = $InputPath.Split(",")
-    $InputPath = $InputPath.Trim()
+    # Set filename template.
+    $DefaultFilename = "vifpics_"
 
-    $InteractiveInput = Test-Input $InputPath
+    # Generate default filename for when no output
+    # filename is specified.
+    $UniqueID = Get-Random
 
-    if (($InteractiveInput.InputType -eq "file" -or $InteractiveInput.InputType -eq "dir") -and -not (Test-Path "$InputPath")) {
-        Show-ErrorMessage -Message "File path `"$InputPath`" doesn't exist. Try again."
+    if (-not $OptionsData.OutputPath) {
+        $OutputPath = "$PWD\$DefaultFilename$UniqueID"    
+    } else {
+        $OutputPath = $OptionsData.OutputPath
     }
 
-    # End script if input file or folder doesn't exist.
-    if ($InputType -ne "file" -and $InputType -ne "dir") { 
-        Show-ErrorMessage -Message "Invalid source. Try again."
+    $OutputFormat = $OptionsData.Format
+
+    # All animated PNGs will output as APNG in temp, then
+    # renamed as PNG after copying to final output destination.
+    if ($OutputFormat -eq "png" -and -not $OptionsData.Frames) {
+        $OutputFormat = "apng"
     }
 
-    Return $InteractiveInput
-}
+    # Output format defaults to GIF.
+    if (-not ($OutputFormat -in $SupportedAnimations) -and -not ($OutputFormat -in $SupportedVideos)) {
+       $OutputFormat = "gif"
+    }    
 
-function Start-GetStartTimecode
-{
-    [console]::CursorVisible = $True
+    $OutputPath = "$OutputPath.$OutputFormat"
 
-    Write-Host "Enter start timecode. Like 1:30 or 1.30. Default: 0:00." -ForegroundColor Cyan
-    do {
-        $Start = Read-Host "[Enter start timecode]"
-        Cancel-Read -Option $Start
-    } while ($Start -ne "" -and (-not ($Start -match $TimeCodePattern) -and -not ($Start -match $TimeCodePattern2) -and -not ($Start -match $TimeCodePattern3)))
-
-    $Start = Trim-String -String $Start
-
-    if ($Start -eq "") {
-        $Start = "0:00"
+    $OutputData = New-Object PSObject -Property @{
+        OutputPath = $OutputPath
+        Format = $OutputFormat
     }
 
-    Return $Start
-}
-
-function Start-GetEndTimeCode
-{
-    [console]::CursorVisible = $True
-
-    Write-Host "Enter animation duration in seconds or 0 for no duration limit. Default: 1." -ForegroundColor Cyan
-    $Duration = Read-Host "[Enter duration]"
-    Cancel-Read -Option $Duration
-
-    if ($Duration -lt 1 -and -not (Test-Integer $Duration)) {
-        $Duration = 1
-    }
-
-    if (-not (Test-Integer $Duration)) {
-        $Duration = 1
-    }
-
-    $Duration = Trim-String -String $Duration
-
-    Return $Duration
+    Return $OutputData
 }
 
 function Set-Timestamps
@@ -897,8 +1306,10 @@ function Set-Timestamps
 
     }
 
-    if ($Start -and $OptionsData.NoTimeLimit -or $InputData.InputFormat -in $SupportedImages) {
-        $TimeRange = "-ss $Start".Split(" ") 
+    # If no time limit is set, or input is an image, or input type
+    # is a folder, set timerange with start timecode without duration.
+    if ($Start -and $OptionsData.NoTimeLimit -or $InputData.InputFormat -in $SupportedImages -or $InputData.InputType -eq "dir") {
+        $TimeRange = "-ss $Start".Split(" ")
     }
 
     $TimestampsData = New-Object PSObject -Property @{
@@ -917,7 +1328,7 @@ function Set-EncoderPreset
         [object] $OptionsData
     )
 
-    if ($OptionsData.Preset -eq "standard" -or -not $OptionsData.Preset) {
+    if ($OptionsData.Preset -eq "standard") {
         Write-Host "PRESET: Animated GIF (standard)" -ForegroundColor Cyan
         $OptionsData.Encoder = "ffmpeg"
         $OptionsData.NoFilter = $True
@@ -936,7 +1347,7 @@ function Set-EncoderPreset
         $OptionsData.Format = "webp"
         $OptionsData.Encoder = "ffmpeg"
         $OptionsData.WebpCompression = 4
-        $OptionsData.WebpQuality = 75
+        $OptionsData.WebpQuality = 85
     } elseif ($OptionsData.Preset -eq "png") {
         Write-Host "PRESET: Animated PNG (APNG)" -ForegroundColor Cyan
         $OptionsData.Format = "apng"
@@ -1019,7 +1430,7 @@ function Set-SizePreset
     }
 }
 
-function Set-AnimationOptions 
+function Set-Resolution
 {
     param (
         [object] $OptionsData
@@ -1031,7 +1442,7 @@ function Set-AnimationOptions
     $Height = $OptionsData.Height
     
     if ($OptionsData.NoAutoScale) {
-        $OptionsData.Resolution = "fps=$FPS,scale=-2:$Height"
+        $OptionsData.Resolution = "fps=$FPS,scale=$Width"+":"+"$Height"
     } else {
         $OptionsData.Resolution = "fps=$FPS,scale=$Width"+":"+"$Height"+":force_original_aspect_ratio=decrease:flags=lanczos"
     }
@@ -1064,204 +1475,56 @@ function Set-LoopOption
     Return $OptionsData.LoopOption
 }
 
-<#
-    TASK FUNCTIONS
-    ________________________________________________________________________________
-#>
-function New-Animation
+function Start-RemoveExistingOutput
 {
-    param (
-        [object] $InputData,
-        [object] $OptionsData,
-        [object] $TimestampsData
-    )
+    # Ask to override when creating a file.
+    if (Test-Path $OutputPath) {
+        do {
+            Write-Host "$OutputPath already exists. Overrite?" -ForegroundColor DarkRed
+            $Confirm = Read-Host "[no (n) / yes (y)]"
+        } while ($Confirm -ne "" -and $Confirm -ne "y" -and  $Confirm -ne "yes" -and $Confirm -ne "n" -and  $Confirm -ne "no")
 
-    begin {
-        Write-Host "CREATING ANIMATION" -ForegroundColor Magenta
-        Start-Sleep 1
+        if ($Confirm -eq "y" -or $Confirm -eq "yes") {
 
-        # Check input
-        if (-not ($InputData.InputFormat -in $SupportedAnimations) -and -not ($InputData.InputFormat -in $SupportedVideos)) {
-            Show-ErrorMessage -Message "Input must be an animated image or video file."
-        }
-
-        $InputPath = $InputData.InputPath
-        $Timerange = $TimestampsData.TimeRange
-
-        $OutputData = Get-OutputFile -InputData $InputData -OptionsData $OptionsData
-        $OutputPath = $OutputData.OutputPath
-        $OutputFormat = $OutputData.Format
-
-        # Check output format.
-        if (-not ($OutputFormat -in $SupportedAnimations) -and -not ($OutputFormat -in $SupportedVideos)) {
-            Show-ErrorMessage -Message "'$OutputFormat' is not image/video output format."
-        }
-
-        Start-RemoveExistingOutput
-        
-        New-TempFolder
-    }
-
-    process {
-        $Filters = Set-Filter -InputData $InputData -OptionsData $OptionsData -TimestampsData $TimestampsData -OutputFormat $OutputFormat 
-
-        if ($OptionsData.Encoder -eq "ffmpeg") {
-            $LoopOption = Set-LoopOption -OptionsData $OptionsData -OutputFormat $OutputFormat -Encoder $OutputData.Encoder
-            
-            if ($OutputFormat -eq "webp") {
-                Write-Host "Creating animated WebP (w/ ffmpeg)..." -ForegroundColor Cyan
-                Start-Sleep 1
-    
-                & $ffmpeg $TimeRange -i "$InputPath" $Filters $LoopOption -compression_level $OptionsData.WebpCompression -qscale $OptionsData.WebpQuality -y "$TempPath\animated.webp"
-            } elseif ($OutputFormat -eq "png" -or $OutputFormat -eq "apng") {
-                Write-Host "Creating animated PNG (w/ ffmpeg)..." -ForegroundColor Cyan
-                Start-Sleep 1
-    
-                & $ffmpeg $TimeRange -i "$InputPath" $Filters $LoopOption -y "$TempPath\animated.apng"
-
-                try {
-                    Copy-Item -Path "$TempPath\animated.apng" -Destination "$TempPath\animated.png" -ErrorAction Stop
-                } catch {
-                    Write-Host "Could not copy PNG output. Check temp folder..." -ForegroundColor DarkRed
-                    Pause
-                    Invoke-Item "$TempPath\"
-                    Pause
-                }   
-            } elseif ($OutputFormat -eq "avif" -and $OptionsData.LibAOM) {
-                Write-Host "Creating animated AVIF (w/ ffmpeg using libaom)..." -ForegroundColor Cyan
-                Start-Sleep 1
-    
-                if (-not $AVIFQ) { $AVIFQ = 8 }
-    
-                & $ffmpeg $TimeRange -i "$InputPath" $Filters $LoopOption -c libaom-av1 -cpu-used $OptionsData.AVIFQ -row-mt 1 -g 24 -pix_fmt yuv420p10le -svtav1-params tune=0:film-grain=$OptionsData.FilmGrain -crf $OptionsData.CRF -y "$TempPath\animated.avif"
-            } elseif ($OutputFormat -eq "avif") {
-                Write-Host "Creating animated AVIF (w/ ffmpeg using libsvtav1)..." -ForegroundColor Cyan
-                Start-Sleep 1
-    
-                if (-not $AVIFQ) { $AVIFQ = 13 }
-    
-                & $ffmpeg $TimeRange -i "$InputPath" $Filters $LoopOption -c libsvtav1 -preset $OptionsData.AVIFQ -g 24 -pix_fmt yuv420p10le -svtav1-params tune=0:film-grain=$OptionsData.FilmGrain -crf $OptionsData.CRF -y "$TempPath\animated.avif"
-            } elseif ($OutputFormat -eq "gif") {
-                Write-Host "Creating animated GIF (w/ ffmpeg)..." -ForegroundColor Cyan
-                Start-Sleep 1
- 
-                & $ffmpeg $TimeRange -i "$InputPath" $Filters $LoopOption -y "$TempPath\animated.gif"
-            } elseif ($OutputFormat -eq "mp4" -or $OutputFormat -eq "mkv") {
-                $CodecName = $OutputFormat.ToUpper()
-                Write-Host "Creating $CodecName video (w/ ffmpeg)..." -ForegroundColor Cyan
-                Start-Sleep 1
-
-                & $ffmpeg -i "$InputPath" $Filters $LoopOption -c:v libx264 -c:a copy -crf 21 -preset slow -crf $OptionsData.CRF -y "$TempPath\animated.$OutputFormat"
-            } elseif ($OutputFormat -eq "webm") {
-                Write-Host "Creating WebM video (w/ ffmpeg)..." -ForegroundColor Cyan
-                Start-Sleep 1
-
-                & $ffmpeg -i "$InputPath" $Filters $LoopOption -c:v libvpx-vp9 -c:a libopus -crf $OptionsData.CRF -y "$TempPath\animated.webm"
-            } 
-
-            Vifpics-CheckError -Message "There was a problem creating animation. See ffmpeg output above for details."
-        }
-
-        <#
-            Optional encoders
-        #>
-        if ($OptionsData.Encoder -eq "gifski") {
-            Invoke-gifski -InputData $InputData -OptionsData $OptionsData -TimestampsData $TimestampsData -OutputPath "$TempPath\animated.gif"
-        }
-
-        if ($OptionsData.Encoder -eq "apngasm") {
-            Invoke-apngasm -InputPath $InputPath -OptionsData $OptionsData -TimestampsData $TimestampsData -OutputPath "$TempPath\animated.png"
-        }
-
-        Vifpics-CheckError -Message "There was a problem creating animation. See output above for details."
-
-        try {
-            Copy-Item -Path "$TempPath\animated.$OutputFormat" -Destination "$OutputPath" -ErrorAction Stop
-        } catch {
-            Show-ErrorMessage -Message "Could not save $OutputPath. Check Vifpics temp folder in `"$TempPath`"."
-        }
-    }
-
-    end {
-        Return
-    }
-}
-
-function New-Merge
-{
-    param (
-        [object] $InputData,
-        [object] $OptionsData,
-        [object] $TimestampsData
-    )
-
-    begin {
-        Write-Host "MERGING FILES" -ForegroundColor Magenta
-        Start-Sleep 1
-
-        $InputPath = $InputData.InputPath
-        $InputFormat = $InputData.InputFormat
-        $InputType = $InputData.InputType
-
-        $OutputData = Get-OutputFile -InputData $InputData -OptionsData $OptionsData -OutputPath $OutputPath   
-        $OutputPath = $OutputData.OutputPath
-        $OutputFormat = $OutputData.Format
-
-        Start-RemoveExistingOutput
-
-        New-TempFolder
-    }
-
-    process {
-        if ($InputType -eq "dir") {
-            New-FileListTXT -InputPath $InputPath -InputFromat $InputFormat -InputType $InputType -OptionsData $OptionsData
-            $InputPath = "$TempPath\files.txt"            
-        }
-
-        if (-not ($OptionsData.MergeFormat -in $SupportedImages) -and -not ($OutputFormat -in $SupportedImages)) {
-            Write-Host
-            Write-Host "Merging files (no-recode)..." -ForegroundColor Magenta
-            Start-Sleep 0.5
-
-            & $ffmpeg $ConcatFlag -i "$InputPath" -c:v copy -c:a copy -movflags +faststart -y -copytb 1 "$OutputPath"
-        } else {
-            Write-Host
-            Write-Host "Merging files (re-encode)..." -ForegroundColor Magenta
-            Start-Sleep 0.5
-        
-            $Filters = Set-Filter -InputData $InputData -OptionsData $OptionsData -TimestampsData $TimestampsData -OutputFormat $OutputFormat 
-            
-            $LoopOption = Set-LoopOption -OptionsData $OptionsData -OutputFormat $OutputFormat -Encoder $Encoder
-
-            if ($OutputFormat -eq "webp" -and $Libwebp) {
-                & $ffmpeg $ConcatFlag -i "$InputPath" $Filters $LoopOption -c libwebp -compression_level $OptionsData.WebpCompression -qscale $OptionsData.WebpQuality -y "$OutputPath"
-            } elseif ($OutputFormat -eq "webp") {
-                & $ffmpeg $ConcatFlag -i "$InputPath" $Filters $LoopOption -compression_level $OptionsData.WebpCompression -qscale $OptionsData.WebpQuality -y "$OutputPath"
-            } elseif ($OutputFormat -eq "avif" -and $LibAOM) {
-                if (-not $AVIFQ) { $AVIFQ = 8 }
-                & $ffmpeg $ConcatFlag -i "$InputPath" $Filters $LoopOption -c libaom-av1 -cpu-used $OptionsData.AVIFQ -row-mt 1 -g 24 -pix_fmt yuv420p10le -svtav1-params tune=0:film-grain=$OptionsData.FilmGrain -crf $OptionsData.CRF -y "$OutputPath"
-            } elseif ($OutputFormat -eq "avif") {
-                if (-not $AVIFQ) { $AVIFQ = 13 }
-                & $ffmpeg $ConcatFlag -i "$InputPath" $Filters $LoopOption -c libsvtav1 -preset $AVIFQ -g 24 -pix_fmt yuv420p10le -svtav1-params tune=0:film-grain=$OptionsData.FilmGrain -crf $OptionsData.CRF -y "$OutputPath"
-            } elseif ($OutputFormat -eq "webm") {
-                & $ffmpeg $ConcatFlag -i "$InputPath" $Filters $LoopOption -c:v libvpx-vp9 -c:a libopus -crf $OptionsData.CRF -y "$OutputPath"
-            } elseif ($OutputFormat -eq "mp4" -or $OutputFormat -eq "mkv") {
-                & $ffmpeg $ConcatFlag -i "$InputPath" $Filters $LoopOption -c:v libx264 -c:a copy -crf $OptionsData.CRF -y "$OutputPath"
-            } else {
-                & $ffmpeg $ConcatFlag $HardwareDec -i "$InputPath" $HardwareEnc $Filters $LoopOption -crf $OptionsData.CRF -preset slow -movflags +faststart -y "$OutputPath"
-                Start-RenameAPNG -OutputPath $OutputPath -OutputFormat $OutputFormat
+            try {
+                Remove-Item -Path "$OutputPath" -Force -ErrorAction Stop
+            } catch {
+                Write-Host "Could not remove existing file..."
+                Main
             }
+
+        } else {
+            Write-Host "Cancelled." -ForegroundColor DarkRed
+            Main
         }
-
-        Vifpics-CheckError -Message "There was a problem merging files. See ffmpeg output above for details."
-    }
-
-    end {
-        Return
     }
 }
 
-function New-FileListTXT
+function Start-RenameAPNG
+{
+    param (
+        $OutputPath,
+        [string] $OutputFormat
+    )
+
+    if ((Test-Path "$OutputPath") -and $OutputFormat -eq "apng") {
+        $OutputPath = Get-ChildItem -Path $OutputPath
+        $OutputBasename = $OutputPath.BaseName
+        $OutputExtension = $OutputPath.Extension
+
+        if ($OutputExtension) {
+            try {
+                Copy-Item "$OutputPath" -Destination "$OutputBasename.png" -ErrorAction Stop
+                Remove-Item "$OutputPath"
+            } catch {
+                Write-Host "Could not make normal PNG copy of APNG." -ForegroundColor DarkRed
+                Pause
+            }                        
+        }
+    }
+}
+
+function New-MergeList
 {
     param (
         [string] $InputFile,
@@ -1332,293 +1595,14 @@ function New-FileListTXT
 
         }
     }
-}
 
-function New-Frames
-{
-    param (
-        [object] $InputData,
-        [object] $OptionsData,
-        [object] $TimestampsData
-    )
+     # If file list file is empty tell the user no files
+     # in list.
+     $FileListData = Get-Content "$TempPath\files.txt" -Raw
 
-    begin {
-        Write-Host
-        Write-Host "GENERATING FRAMES" -ForegroundColor Magenta
-        Start-Sleep 1
-
-        # Check input.
-        if (-not ($InputData.InputFormat -in $SupportedAnimations) -and -not ($InputData.InputFormat -in $SupportedVideos)) {
-            Show-ErrorMessage -Message "Input file needs to be an animated image or video file."
-        }
-
-        if ($InputData.InputFormat -eq "webp") {
-            Show-ErrorMessage "This version of Vifpics cannot convert animated WebP to other formats."
-        }
-
-        $OutputFormat = $OptionsData.Format
-
-        # Check output format.
-        if ($OutputFormat -ne "png" -and $OutputFormat -ne "jpg" -and $OutputFormat -ne "webp" -and $OutputFormat -ne "avif") {
-            $OutputFormat = "png"
-        }
-
-        $InputPath = $InputData.InputPath
-        $InputBasename = $InputData.InputBasename
-
-        $UniqueID = Get-Random
-        $FramesFolder = "$InputBasename" + "_frames_" + "$UniqueID"
-        $OutputPath = "$PWD\$FramesFolder"
-        $FramesName = "frame_"
-        $FramesIndex = "%01d"
-        $TimeRange = $TimestampsData.TimeRange
-    }
-
-    process {        
-        $Filters = Set-Filter -InputData $InputData -OptionsData $OptionsData -TimestampsData $TimestampsData -OutputFormat $OutputFormat 
-
-        try {
-            New-Item -Path "$OutputPath" -ItemType Directory -ErrorAction Stop
-        } catch {
-            Show-ErrorMessage -Message "Could not create frames folder to store frames in."
-        }
-    
-        if ($OutputFormat -eq "webp") {
-            & $ffmpeg $TimeRange -i "$InputPath" $Filters -compression_level $OptionsData.WebpCompression -qscale $OptionsData.WebpQuality -y -c libwebp "$OutputPath\$FramesName$FramesIndex.webp"
-        } elseif ($OutputFormat -eq "avif") {
-            & $ffmpeg $TimeRange -i "$InputPath" $Filters -c libaom-av1 -cpu-used $OptionsData.AVIFQ -row-mt 1 -g 24 -pix_fmt yuv420p10le -svtav1-params tune=0:film-grain=$OptionsData.FilmGrain -crf $OptionsData.CRF -y "$OutputPath\$FramesName$FramesIndex.avif"
-        } else {
-            & $ffmpeg $TimeRange -i "$InputPath" $Filters -y "$OutputPath\$FramesName$FramesIndex.$OutputFormat"
-        }
-
-        Vifpics-CheckError -Message "Could not create frames. Check ffmpeg output above for details."
-    }
-
-    end {
-        Return
-    }
-}
-
-function Start-RemoveExistingOutput
-{
-    # Ask to override when creating a file.
-    if (Test-Path $OutputPath) {
-        do {
-            Write-Host "$OutputPath already exists. Overrite?" -ForegroundColor DarkRed
-            $Confirm = Read-Host "[no (n) / yes (y)]"
-        } while ($Confirm -ne "" -and $Confirm -ne "y" -and  $Confirm -ne "yes" -and $Confirm -ne "n" -and  $Confirm -ne "no")
-
-        if ($Confirm -eq "y" -or $Confirm -eq "yes") {
-
-            try {
-                Remove-Item -Path "$OutputPath" -Force -ErrorAction Stop
-            } catch {
-                Write-Host "Could not remove existing file..."
-                Main
-            }
-
-        } else {
-            Write-Host "Cancelled." -ForegroundColor DarkRed
-            Main
-        }
-    }
-}
-
-function Start-RenameAPNG
-{
-    param (
-        [string] $OutputPath,
-        [string] $OutputFormat
-    )
-
-    if ((Test-Path "$OutputPath") -and $OutputFormat -eq "apng") {
-        $OutputPath = Get-ChildItem -Path $OutputPath
-        $OutputBasename = $OutputPath.BaseName
-        $OutputExtension = $OutputPath.Extension
-
-        if ($OutputExtension) {
-            try {
-                Copy-Item "$OutputPath" -Destination "$OutputBasename.png" -ErrorAction Stop
-                Remove-Item "$OutputPath"
-            } catch {
-                Write-Host "Could not make normal PNG copy of APNG." -ForegroundColor DarkRed
-                Pause
-            }                        
-        }
-    }
-}
-
-<#
-    GENERAL PROGRAM FUNCTIONS
-    ________________________________________________________________________________
-#>
-function Invoke-gifski
-{
-    param (
-        [object] $InputData,
-        [object] $OptionsData,
-        [object] $TimestampsData,
-        [string] $OutputPath
-    )
-
-    begin {
-        $InputPath = $InputData.InputPath
-        $Timerange = $TimestampsData.TimeRange
-        $Resolution = $OptionsData.Resolution
-        $Width = $OptionsData.Width
-        $Height = $OptionsData.Height
-    }
-
-    process {
-        Write-Host "Generating frames for gifski..." -ForegroundColor Blue
-        Start-Sleep 0.5
-        
-        New-FramesFolder
-
-        & $ffmpeg $TimeRange -i "$InputPath" -vf $Resolution -y "$TempPath\frames\frame_%01d.png"
-
-        Vifpics-CheckError -Message "There was a problem generating frames. See output ffmpeg above for details."
-
-        Write-Host "Creating higher quality animated GIF (w/ gifski)..." -ForegroundColor Cyan
-        Start-Sleep 0.5
-        
-        # Adjust for Gifski resolution.
-        $GifskiRes = ""
-
-        # Gifski default resolution.
-        if ($Width -gt 0 -and (Test-Integer $Width)) { $GifskiRes = "--width $Width" }
-        if ($Width -gt 0 -and $Height -gt 0 -and (Test-Integer $Width)) { $GifskiRes = "--width $Width --height $Height".Split(" ") }
-
-        $HasFfprobe = Test-Command "ffprobe"
-
-        if (-not $HasFfprobe -and $Width -eq "-1" -and $Height -eq "-1") {
-            Write-Host "`nffprobe wasn't found or is executable. Using default gifski resolution..." -ForegroundColor DarkRed
-            Start-Sleep 1.5
-        } else {
-            $Codec = Get-CodecInfo -InputPath $InputPath
-            
-            # Use ffprobe to get original resolution for gifski encoding.
-            if ($Codec -ne @{}) {
-                if ($Width -le 0 -and $Codec.streams[0].width) { 
-                    $GifskiRes = "--width "+$Codec.streams[0].width
-                }
-
-                if ($Width -le 0 -and ($Codec.streams[0].width -gt 0) -and ($Codec.streams[0].height -gt 0)) { 
-                    $GifskiRes = "--width "+$Codec.streams[0].width+" --height "+$Codec.streams[0].height
-                }    
-
-                if ($Width -le 0 -and $Codec.streams[1].width -gt 0) { 
-                    $GifskiRes = "--width "+$Codec.streams[1].width
-                }
-
-                if ($Width -le 0 -and ($Codec.streams[1].width -gt 0 -or $Codec.streams[1].height -gt 0)) { 
-                    $GifskiRes = "--width "+$Codec.streams[1].width+" --height "+$Codec.streams[1].height
-                }   
-            }
-        }
-
-        $GifskiRes = $GifskiRes.Split(" ")
-
-        if (-not $GifskiRes) {
-            Clear-Variable GifskiRes
-        }
-
-
-        $GifskiQuality = $OptionsData.GifskiQuality
-        $LoopOption = Set-LoopOption -OptionsData $OptionsData -OutputFormat $OutputFormat -Encoder "gifski"
-
-        & $gifski $GifskiRes --quality $GifskiQuality --fps $OptionsData.FPS $LoopOption --fast -o "$OutputPath" "$TempPath\frames\frame_*.png"
-
-        Vifpics-CheckError -Message "There was an error creating animation. See gifkski output above for details."
-    }
-
-    end {
-        Return
-    }
-}
-
-function Get-OutputFile
-{
-    param (
-        [object] $InputData,
-        [object] $OptionsData
-    )
-
-    # Set filename template.
-    $DefaultFilename = "vifpics_"
-
-    # Generate default filename for when no output
-    # filename is specified.
-    $UniqueID = Get-Random
-
-    if (-not $OptionsData.OutputPath) {
-        $OutputPath = "$PWD\$DefaultFilename$UniqueID"    
-    } else {
-        $OutputPath = $OptionsData.OutputPath
-    }
-
-    $OutputFormat = $OptionsData.Format
-
-    # All animated PNGs will output as APNG in temp, then
-    # renamed as PNG after copying to final output destination.
-    if ($OutputFormat -eq "png" -and -not $OptionsData.Frames) {
-        $OutputFormat = "apng"
-    }
-
-    # Output format defaults to GIF.
-    if (-not ($OutputFormat -in $SupportedAnimations) -and -not ($OutputFormat -in $SupportedVideos)) {
-       $OutputFormat = "gif"
-    }    
-
-    $OutputPath = "$OutputPath.$OutputFormat"
-
-    $OutputData = New-Object PSObject -Property @{
-        OutputPath = $OutputPath
-        Format = $OutputFormat
-    }
-
-    Return $OutputData
-}
-
-function Invoke-apngasm
-{
-    param (
-        [object] $InputPath,
-        [string] $OutputPath,
-        [object] $OptionsData,
-        [object] $TimestampsData
-    )
-
-    begin {
-        $Resolution = $OptionsData.Resolution
-    }
-
-    process {
-        Write-Host "Creating optimized animated PNG (w/ apngasm)..." -ForegroundColor Cyan
-        Start-Sleep 0.5
-        Write-Host "Generating frames..." -ForegroundColor Blue
-        Start-Sleep 0.5
-
-        New-FramesFolder
-
-        $Timerange = $TimestampsData.TimeRange
-        & $ffmpeg $Timerange -i "$InputPath" -vf $Resolution -y "$TempPath\frames\frame-%04d.png"
-
-        Vifpics-CheckError -Message "There was a problem generating frames. Check ffmpeg output above for details."
-
-        Write-Host "Generating PNG..." -ForegroundColor Cyan
-        Start-Sleep 0.5
-
-        $LoopOption = Set-LoopOption -OptionsData $OptionsData -OutputFormat $OutputFormat -Encoder "apngasm"
-
-        & $apngasm $OutputPath "$TempPath\frames\frame-*.png" 1 $OptionsData.FPS $LoopOption $OptionsData.PNGcompressMethod -kc
-
-        Vifpics-CheckError -Message "There was a problem creating file. Check apngasm output above for details."
-    }
-
-    end {
-        Return
-    }
+     if (-not $FileListData) {
+        Show-ErrorMessage -Message "No supported files were added to filelist. Cannot create animation."
+     }
 }
 
 function Get-CodecInfo
@@ -1749,6 +1733,7 @@ function New-FramesFolder
 function Test-Command
 {
     param (
+        [Parameter(Mandatory=$true)]
         [string] $Command
     )
 
@@ -1756,6 +1741,20 @@ function Test-Command
         Return $True
     } else {
         Return $False
+    }
+}
+
+function Require-Command
+{
+    param (
+        [Parameter(Mandatory=$true)]
+        [string] $Command
+    )
+
+    $HasCommand = Test-Command -Command "$Command"
+
+    if (-not $HasCommand) {
+        Show-ErrorMessage -Message "$Command was not found or is executable."
     }
 }
 
@@ -1814,6 +1813,17 @@ function Vifpics-CheckError
         Pause
         Main
     }
+}
+
+$HasFFmpeg = Test-Command -Command "ffmpeg"
+if (-not $HasFFmpeg) {
+    Clear-Host
+    Show-MenuHeader
+
+    Write-Host "FFmpeg must be installed or located in the same folder" -ForegroundColor DarkRed
+    Write-Host "as Vifpics for Vifpics to run properly." -ForegroundColor DarkRed
+    Write-Host "Select Download Encoders to download ffmpeg and other encoders." -ForegroundColor Cyan
+    Pause
 }
 
 Main
