@@ -1,6 +1,6 @@
 private/
 .vscode/
-.vscode/settings.json\
+.vscode/settings.json
 ffmpeg.exe
 ffprobe.exe
 gifski.exe
