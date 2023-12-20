@@ -3,7 +3,7 @@
 ![vifpics screenshot](screenshot.png)
 
 # About
-Vifpics is a menu driven PowerShell program for turning video clips into high quality animated images. It uses tools such as [ffmpeg](https://ffmpeg.org/) and [gifski](https://gif.ski/). Vifpics can turn videos into animated GIFs, PNGs (APNG), WebP, and AVIF. It can also be used to generate thumbnails from video.
+Vifpics is a menu driven PowerShell program for turning video clips into high quality animated images. It uses tools such as [ffmpeg](https://ffmpeg.org/), [gifski](https://gif.ski/) and others. Vifpics can turn videos into animated GIFs, PNGs (APNG), WebP, and AVIF. It can also be used to generate image stills from video.
 
 # Navigate
 * [Features](#features)
