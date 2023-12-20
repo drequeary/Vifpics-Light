@@ -38,7 +38,7 @@ With gifski, Vifpics can produce even higher quality animated GIFS with reduced 
 With apngasm, Vifpics can create compressed animated PNGs.
 
 ### [ffprobe](https://www.gyan.dev/ffmpeg/builds/)
-ffprobe will allow Vifpics to export original resolution with the Gifski encoder.
+ffprobe will allow Vifpics to export original resolution with Gifski.
 
 # Installation
 1. Download latest zip.
@@ -206,6 +206,7 @@ The following are keyboard controls for Vifpics.
 # Limitations
 * Converting FROM and merging WebP is NOT supported.
 * Merging GIFs is NOT supported.
+* Without ffprobe installed, Best Quality Animated GIF options will ignore size preset. Defaulting to 640x360.
 
 # SPECIAL THANKS
 ## NabiKAZ on GitHub for making video2gif.bat  
