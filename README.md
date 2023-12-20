@@ -38,7 +38,7 @@ With gifski, Vifpics can produce even higher quality animated GIFS with reduced 
 With apngasm, Vifpics can create compressed animated PNGs.
 
 ### [ffprobe](https://www.gyan.dev/ffmpeg/builds/)
-ffprobe will allow Vifpics to export original resolution with the Gifski encoder. Otherwise, Best Quality GIFs will have a resolution 640x480, ignoring original size option.
+ffprobe will allow Vifpics to export original resolution with the Gifski encoder.
 
 # Installation
 1. Download latest zip.
