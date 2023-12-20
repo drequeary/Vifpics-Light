@@ -143,8 +143,8 @@ Select whether to loop animation infinitely or once.
 ## Filename
 Enter output filename. If not specified, Vifpics will automatically generate a filename.
 
-# Generating Frames
-You can generate frames from videos or animated images.
+# Generating Stills
+You can generate image stills from videos or animated images.
 
 ## Source
 Select source. This can be a video or animated image.
@@ -197,7 +197,7 @@ The following are keyboard controls for Vifpics.
 * MKV
 * WebM
 
-## Image Frames Output Format
+## Image Still Output Format
 * PNG
 * JPG
 * WebP
