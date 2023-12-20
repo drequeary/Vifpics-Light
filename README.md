@@ -143,7 +143,7 @@ Select whether to loop animation infinitely or once.
 ## Filename
 Enter output filename. If not specified, Vifpics will automatically generate a filename.
 
-# Generating Stills
+# Generating Frames
 You can generate image stills from videos or animated images.
 
 ## Source
