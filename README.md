@@ -12,6 +12,7 @@ Vifpics is a menu driven PowerShell program for turning video clips into high qu
 * [Creating Animations/Video](#creating-animations)
 * [Generating Frames](#generating-frames)
 * [Keyboard Controls](#keyboard-controls)
+* [Start and Duration Options](#start-and-duration-options)
 * [Supported Formats](#supported-formats)
 * [Limitations](#limitations)
 * [Special Thanks](#special-thanks)
@@ -160,7 +161,7 @@ Set the length of video to extract frames from in seconds. [See Start and Durati
 
 * Generating frames FROM animated WebP is not supported.
 
-## Start and Duration Options
+# Start and Duration Options
 Start and Duration let you choose where what part of a video to turn into an animation or frames.
 
 For Start option, you can use seconds like `1` for one second, or timecode formated like `00:00`, `00.00`, `0:00`, or `0.00`. If no timecode is provided, it will be set to 00:00 or the start of the video.
