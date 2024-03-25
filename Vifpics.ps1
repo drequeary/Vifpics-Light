@@ -695,12 +695,12 @@ function Start-DownloadEncoders {
 
         foreach($Encoder in $EncodersToGet) {
             Write-Host "`nDownloading $Encoder..." -ForegroundColor Cyan
-            Write-Host "FROM: https://cdn.vif.pics/public/encoders/$Encoder.exe" -ForegroundColor Blue
+            Write-Host "FROM: https://cdn.deandrequeary.com/vifpics/public/encoders/$Encoder.exe" -ForegroundColor Blue
             Start-Sleep 0.5
 
             try {
                 Write-Host "Checking connection..." -ForegroundColor Blue
-                $Response = Invoke-WebRequest -Uri "https://cdn.vif.pics/public/encoders/$Encoder.exe" -ErrorAction SilentlyContinue
+                $Response = Invoke-WebRequest -Uri "https://cdn.deandrequeary.com/vifpics/public/encoders/$Encoder.exe" -ErrorAction SilentlyContinue
             } catch {
                 Write-Host "Connection error. Could not download $Encoder.exe. Skipping...`n" -ForegroundColor DarkRed
                 Start-Sleep 1.5
@@ -1239,7 +1239,7 @@ function Get-OutputFile
     $UniqueID = Get-Random
 
     if (-not $OptionsData.OutputPath) {
-        $OutputPath = "$PWD\$DefaultFilename$UniqueID"    
+        $OutputPath = "$PWD\$DefaultFilename$UniqueID"
     } else {
         $OutputPath = $OptionsData.OutputPath
     }
