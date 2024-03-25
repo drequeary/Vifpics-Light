@@ -685,7 +685,7 @@ function Start-DownloadEncoders {
     $WithErrors = $False
     
     Write-Host "Would you like to download encoders?" -ForegroundColor Cyan
-    Write-Host "This will download ffmpeg, ffprobe, gifski, and `napngasm from cdn.vif.pics." -ForegroundColor Cyan
+    Write-Host "This will download ffmpeg, ffprobe, gifski, and `napngasm from DeAndre Queary's CDN." -ForegroundColor Cyan
     do {
         $Confirm = Read-Host "[no (n) / yes (y)]"
     } while ($Confirm -ne "y" -and $Confirm -ne "yes" -and $Confirm -ne "n" -and  $Confirm -ne "no")
@@ -712,7 +712,7 @@ function Start-DownloadEncoders {
             Write-Host "Connection successful..." -ForegroundColor Green
             Start-Sleep 0.5
             
-            curl -o "$FilePath\$Encoder.exe" "https://cdn.vif.pics/public/encoders/$Encoder.exe"
+            curl -o "$FilePath\$Encoder.exe" "https://cdn.deandrequeary.com/vifpics/public/encoders/$Encoder.exe"
         }
 
         if ($WithErrors -eq $True) {
